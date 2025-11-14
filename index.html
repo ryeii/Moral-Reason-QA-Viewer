@@ -53,14 +53,9 @@
       font-size: 1.4rem;
       font-weight: 700;
       display: flex;
-      align-items: baseline;
-      gap: 6px;
-    }
-
-    header h1 span {
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--text-muted);
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .controls {
@@ -155,6 +150,42 @@
     .pill.error {
       background: #fee2e2;
       color: var(--danger);
+    }
+
+    /* Mode toggle chips */
+    .mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+    }
+
+    .mode-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .mode-chip {
+      border-radius: 999px;
+      border: none;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 500;
+      transition: background 0.1s ease, color 0.1s ease;
+    }
+
+    .mode-chip.active {
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
     }
 
     main {
@@ -382,7 +413,16 @@
     <header>
       <h1>
         Moral-Reason-QA Viewer
-        <span>Virtue · Deontological · Utilitarian</span>
+        <!-- Mode switch replaces old "Virtue · Deontological · Utilitarian" text -->
+        <span class="mode-toggle">
+          <span class="mode-label">View</span>
+          <button class="mode-chip active" data-mode="disagreement">
+            Disagreements only
+          </button>
+          <button class="mode-chip" data-mode="raw">
+            All scenarios
+          </button>
+        </span>
       </h1>
       <div class="controls">
         <span id="status-pill" class="pill loading">Loading dataset…</span>
@@ -487,24 +527,46 @@
 
   <script>
     // ---- CONFIG ----
-    const CSV_SOURCES = [
-      {
-        framework: "virtue",
-        url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_virtue_disagreement.csv",
-      },
-      {
-        framework: "utilitarian",
-        url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_utilitarian_disagreement.csv",
-      },
-      {
-        framework: "deontological",
-        url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_deontological_disagreement.csv",
-      },
-    ];
+    const DATASET_CONFIGS = {
+      disagreement: [
+        {
+          framework: "virtue",
+          url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_virtue_disagreement.csv",
+        },
+        {
+          framework: "utilitarian",
+          url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_utilitarian_disagreement.csv",
+        },
+        {
+          framework: "deontological",
+          url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_deontological_disagreement.csv",
+        },
+      ],
+      raw: [
+        {
+          framework: "virtue",
+          url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_virtue_raw.csv",
+        },
+        {
+          framework: "utilitarian",
+          url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_utilitarian_raw.csv",
+        },
+        {
+          framework: "deontological",
+          url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_deontological_raw.csv",
+        },
+      ],
+    };
 
     const state = {
       scenarios: [],
       currentIndex: 0,
+      mode: "disagreement", // "disagreement" or "raw"
+    };
+
+    const cache = {
+      disagreement: null,
+      raw: null,
     };
 
     const el = {
@@ -518,6 +580,7 @@
       nextBtn: document.getElementById("next-btn"),
       scenarioInput: document.getElementById("scenario-input"),
       jumpBtn: document.getElementById("jump-btn"),
+      modeChips: document.querySelectorAll(".mode-chip"),
       framework: {
         utilitarian: {
           decisions: document.getElementById("utilitarian-decisions"),
@@ -536,7 +599,7 @@
 
     function setStatus(text, type = "loading") {
       el.statusPill.textContent = text;
-      el.statusPill.className = "pill " + type;
+      el.statusPill.className = "pill " + (type || "");
     }
 
     function parseCsvSource({ framework, url }) {
@@ -769,6 +832,63 @@
       renderScenario();
     }
 
+    async function loadMode(mode) {
+      if (!DATASET_CONFIGS[mode]) {
+        throw new Error(`Unknown mode: ${mode}`);
+      }
+
+      // If cached, reuse
+      if (cache[mode]) {
+        return cache[mode];
+      }
+
+      const label =
+        mode === "disagreement" ? "disagreement-only" : "all (raw) scenarios";
+      setStatus(`Loading ${label} CSVs from HuggingFace…`, "loading");
+
+      const sources = DATASET_CONFIGS[mode];
+      const datasets = await Promise.all(sources.map((src) => parseCsvSource(src)));
+      const scenarios = buildScenarios(datasets);
+      cache[mode] = scenarios;
+      return scenarios;
+    }
+
+    async function switchMode(mode) {
+      if (state.mode === mode) return;
+      state.mode = mode;
+
+      // Update chip UI
+      el.modeChips.forEach((chip) => {
+        chip.classList.toggle("active", chip.dataset.mode === mode);
+      });
+
+      try {
+        const scenarios = await loadMode(mode);
+
+        if (!scenarios.length) {
+          setStatus("No scenarios found in the dataset.", "error");
+          state.scenarios = [];
+          return;
+        }
+
+        state.scenarios = scenarios;
+        state.currentIndex = 0;
+
+        const label =
+          mode === "disagreement" ? "disagreements only" : "all scenarios";
+        setStatus(`Loaded ${scenarios.length} scenarios (${label}).`, "");
+        el.statusPill.className = "pill";
+
+        el.prevBtn.disabled = false;
+        el.nextBtn.disabled = false;
+
+        renderScenario();
+      } catch (err) {
+        console.error(err);
+        setStatus("Error loading dataset. Check console.", "error");
+      }
+    }
+
     // ---- EVENT BINDINGS ----
     el.prevBtn.addEventListener("click", () => {
       if (state.currentIndex > 0) {
@@ -794,27 +914,30 @@
       }
     });
 
+    el.modeChips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const mode = chip.dataset.mode;
+        switchMode(mode);
+      });
+    });
+
     // ---- INIT ----
     (async function init() {
+      // Default to disagreement-only mode on load
       try {
-        setStatus("Loading CSVs from HuggingFace…", "loading");
-        const datasets = await Promise.all(
-          CSV_SOURCES.map((src) => parseCsvSource(src))
-        );
-        const scenarios = buildScenarios(datasets);
-
+        const scenarios = await loadMode("disagreement");
         if (!scenarios.length) {
           setStatus("No scenarios found in the dataset.", "error");
           return;
         }
         state.scenarios = scenarios;
         state.currentIndex = 0;
+        state.mode = "disagreement";
 
-        setStatus(`Loaded ${scenarios.length} scenarios.`, "");
+        setStatus(`Loaded ${scenarios.length} scenarios (disagreements only).`, "");
         el.statusPill.className = "pill";
         el.prevBtn.disabled = false;
         el.nextBtn.disabled = false;
-
         renderScenario();
       } catch (err) {
         console.error(err);
