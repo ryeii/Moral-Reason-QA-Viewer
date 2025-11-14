@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Moral-Reason-QA Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card-bg: #ffffff;
+      --accent: #3b82f6;
+      --accent-soft: #dbeafe;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --border-subtle: #e5e7eb;
+      --danger: #ef4444;
+      --shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.12);
+      --radius-lg: 18px;
+      --radius-xl: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: radial-gradient(circle at top, #e0f2fe 0, #f5f7fb 45%, #f9fafb 100%);
+      color: var(--text-main);
+    }
+
+    #app {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.4rem;
+      font-weight: 700;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    header h1 span {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 999px;
+      padding: 6px 14px;
+      background: var(--accent);
+      color: white;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+      transition: transform 0.08s ease, box-shadow 0.08s ease,
+        background 0.08s ease;
+    }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+      box-shadow: none;
+    }
+    .btn:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
+      background: #2563eb;
+    }
+
+    .btn.secondary {
+      background: #e5e7eb;
+      color: #111827;
+      box-shadow: none;
+    }
+    .btn.secondary:hover {
+      background: #d1d5db;
+      box-shadow: none;
+      transform: translateY(-1px);
+    }
+
+    .scenario-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .scenario-nav input {
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      min-width: 130px;
+      outline: none;
+    }
+    .scenario-nav input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+    }
+
+    .scenario-index {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .pill {
+      font-size: 0.7rem;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .pill.loading {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .pill.error {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .scenario-card {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: var(--radius-xl);
+      padding: 18px 18px 16px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      backdrop-filter: blur(16px);
+    }
+
+    .scenario-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .scenario-id-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .scenario-context {
+      font-size: 0.95rem;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+
+    .actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .action-pill {
+      flex: 1 1 180px;
+      min-width: 0;
+      background: var(--accent-soft);
+      border-radius: var(--radius-lg);
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .action-pill strong {
+      font-size: 0.8rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #1d4ed8;
+    }
+
+    .framework-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 960px) {
+      .framework-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .framework-column {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .framework-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 4px 1px;
+    }
+
+    .framework-name {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .framework-tag {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.96);
+      border-radius: var(--radius-lg);
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      box-shadow: 0 9px 20px rgba(148, 163, 184, 0.15);
+    }
+
+    .card-title {
+      font-weight: 600;
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .decision-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .decision-line {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px 6px;
+      border-radius: 8px;
+      background: #eff6ff;
+    }
+
+    .decision-line.highlight {
+      border: 1px solid var(--accent);
+      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
+    }
+
+    .decision-line-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #1d4ed8;
+    }
+
+    .decision-line-main span.choice {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.75rem;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: white;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+
+    .decision-line-count {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .decision-line-action {
+      font-size: 0.8rem;
+    }
+
+    .no-data {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .thoughts-list {
+      max-height: 190px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .thought-item {
+      padding: 6px 6px;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+    }
+
+    .thought-meta {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .thought-text {
+      font-size: 0.82rem;
+      line-height: 1.35;
+      white-space: pre-wrap;
+    }
+
+    .footer {
+      margin-top: 18px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>
+        Moral-Reason-QA Viewer
+        <span>Virtue · Deontological · Utilitarian</span>
+      </h1>
+      <div class="controls">
+        <span id="status-pill" class="pill loading">Loading dataset…</span>
+        <div class="scenario-nav">
+          <button id="prev-btn" class="btn secondary" disabled>&larr; Prev</button>
+          <button id="next-btn" class="btn secondary" disabled>Next &rarr;</button>
+          <input
+            id="scenario-input"
+            type="text"
+            placeholder="Jump to scenario ID (e.g., H_001)"
+          />
+          <button id="jump-btn" class="btn secondary">Go</button>
+          <span id="scenario-index" class="scenario-index"></span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="scenario-card">
+        <div class="scenario-header-row">
+          <div>
+            <div class="scenario-id-label" id="scenario-id">Scenario: —</div>
+          </div>
+          <div class="pill">Context &amp; Actions</div>
+        </div>
+        <div id="scenario-context" class="scenario-context">
+          Loading…
+        </div>
+        <div class="actions-row">
+          <div class="action-pill">
+            <strong>Action A</strong>
+            <span id="action-a">—</span>
+          </div>
+          <div class="action-pill">
+            <strong>Action B</strong>
+            <span id="action-b">—</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="framework-grid">
+        <!-- Utilitarian -->
+        <div class="framework-column" data-fw="utilitarian">
+          <div class="framework-header">
+            <div class="framework-name">Utilitarian</div>
+            <div class="framework-tag">Maximize overall utility</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Decision Summary</div>
+            <div class="decision-summary" id="utilitarian-decisions"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Thought Processes</div>
+            <div class="thoughts-list" id="utilitarian-thoughts"></div>
+          </div>
+        </div>
+
+        <!-- Deontological -->
+        <div class="framework-column" data-fw="deontological">
+          <div class="framework-header">
+            <div class="framework-name">Deontological</div>
+            <div class="framework-tag">Duty- and rule-based</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Decision Summary</div>
+            <div class="decision-summary" id="deontological-decisions"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Thought Processes</div>
+            <div class="thoughts-list" id="deontological-thoughts"></div>
+          </div>
+        </div>
+
+        <!-- Virtue Ethics -->
+        <div class="framework-column" data-fw="virtue">
+          <div class="framework-header">
+            <div class="framework-name">Virtue Ethics</div>
+            <div class="framework-tag">Character and virtues</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Decision Summary</div>
+            <div class="decision-summary" id="virtue-decisions"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Thought Processes</div>
+            <div class="thoughts-list" id="virtue-thoughts"></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="footer">
+        Data from
+        <a
+          href="https://huggingface.co/datasets/zankjhk/Moral-Reason-QA"
+          target="_blank"
+          rel="noreferrer"
+          >Moral-Reason-QA</a
+        >
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ---- CONFIG ----
+    const CSV_SOURCES = [
+      {
+        framework: "virtue",
+        url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_virtue_disagreement.csv",
+      },
+      {
+        framework: "utilitarian",
+        url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_utilitarian_disagreement.csv",
+      },
+      {
+        framework: "deontological",
+        url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_deontological_disagreement.csv",
+      },
+    ];
+
+    const state = {
+      scenarios: [],
+      currentIndex: 0,
+    };
+
+    const el = {
+      statusPill: document.getElementById("status-pill"),
+      scenarioId: document.getElementById("scenario-id"),
+      scenarioContext: document.getElementById("scenario-context"),
+      actionA: document.getElementById("action-a"),
+      actionB: document.getElementById("action-b"),
+      scenarioIndex: document.getElementById("scenario-index"),
+      prevBtn: document.getElementById("prev-btn"),
+      nextBtn: document.getElementById("next-btn"),
+      scenarioInput: document.getElementById("scenario-input"),
+      jumpBtn: document.getElementById("jump-btn"),
+      framework: {
+        utilitarian: {
+          decisions: document.getElementById("utilitarian-decisions"),
+          thoughts: document.getElementById("utilitarian-thoughts"),
+        },
+        deontological: {
+          decisions: document.getElementById("deontological-decisions"),
+          thoughts: document.getElementById("deontological-thoughts"),
+        },
+        virtue: {
+          decisions: document.getElementById("virtue-decisions"),
+          thoughts: document.getElementById("virtue-thoughts"),
+        },
+      },
+    };
+
+    function setStatus(text, type = "loading") {
+      el.statusPill.textContent = text;
+      el.statusPill.className = "pill " + type;
+    }
+
+    function parseCsvSource({ framework, url }) {
+      return new Promise((resolve, reject) => {
+        Papa.parse(url, {
+          download: true,
+          header: true,
+          skipEmptyLines: "greedy",
+          complete: (results) => {
+            if (results.errors && results.errors.length) {
+              console.warn("CSV parse errors for", framework, results.errors);
+            }
+            const rows = (results.data || []).map((row) => ({
+              ...row,
+              framework:
+                (row.framework || "").toLowerCase() || framework.toLowerCase(),
+            }));
+            resolve({ framework, rows });
+          },
+          error: (err) => reject(err),
+        });
+      });
+    }
+
+    function buildScenarios(frameworkDatasets) {
+      const byId = new Map();
+
+      frameworkDatasets.forEach(({ rows }) => {
+        rows.forEach((row) => {
+          const id = (row.scenario_id || "").trim();
+          if (!id) return;
+
+          if (!byId.has(id)) {
+            byId.set(id, {
+              scenario_id: id,
+              context: row.context || "",
+              action1: row.action1 || "",
+              action2: row.action2 || "",
+              frameworks: {
+                utilitarian: [],
+                deontological: [],
+                virtue: [],
+              },
+            });
+          }
+          const scenario = byId.get(id);
+          const fw = (row.framework || "").toLowerCase();
+          if (!scenario.frameworks[fw]) {
+            scenario.frameworks[fw] = [];
+          }
+          scenario.frameworks[fw].push(row);
+        });
+      });
+
+      return Array.from(byId.values()).sort((a, b) =>
+        a.scenario_id.localeCompare(b.scenario_id)
+      );
+    }
+
+    function summarizeChoices(entries) {
+      const counts = {};
+      entries.forEach((r) => {
+        const choiceRaw = (r.choice || "").trim();
+        if (!choiceRaw) return;
+        const key = choiceRaw.toUpperCase();
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      return counts;
+    }
+
+    function renderDecisionSummary(container, frameworkEntries, scenario) {
+      container.innerHTML = "";
+
+      if (!frameworkEntries || !frameworkEntries.length) {
+        const p = document.createElement("div");
+        p.className = "no-data";
+        p.textContent = "No annotations for this framework.";
+        container.appendChild(p);
+        return;
+      }
+
+      const counts = summarizeChoices(frameworkEntries);
+      const total = frameworkEntries.length;
+
+      if (!Object.keys(counts).length) {
+        const p = document.createElement("div");
+        p.className = "no-data";
+        p.textContent = "No recorded choices.";
+        container.appendChild(p);
+        return;
+      }
+
+      const maxCount = Math.max(...Object.values(counts));
+
+      Object.keys(counts)
+        .sort()
+        .forEach((choiceKey) => {
+          const count = counts[choiceKey];
+          const wrapper = document.createElement("div");
+          wrapper.className =
+            "decision-line" + (count === maxCount ? " highlight" : "");
+
+          const topRow = document.createElement("div");
+          topRow.className = "decision-line-main";
+
+          const choiceSpan = document.createElement("span");
+          choiceSpan.className = "choice";
+          choiceSpan.textContent = choiceKey;
+
+          const countSpan = document.createElement("span");
+          countSpan.className = "decision-line-count";
+          const pct = ((count / total) * 100).toFixed(1);
+          countSpan.textContent = `${count}/${total} annotators (${pct}%)`;
+
+          topRow.appendChild(choiceSpan);
+          topRow.appendChild(countSpan);
+
+          const actionLine = document.createElement("div");
+          actionLine.className = "decision-line-action";
+
+          const actionText =
+            choiceKey === "A"
+              ? scenario.action1
+              : choiceKey === "B"
+              ? scenario.action2
+              : "";
+
+          actionLine.textContent = actionText
+            ? `Chooses: ${actionText}`
+            : "Action text unavailable.";
+
+          wrapper.appendChild(topRow);
+          wrapper.appendChild(actionLine);
+          container.appendChild(wrapper);
+        });
+    }
+
+    function renderThoughts(container, frameworkEntries, scenario) {
+      container.innerHTML = "";
+
+      if (!frameworkEntries || !frameworkEntries.length) {
+        const p = document.createElement("div");
+        p.className = "no-data";
+        p.textContent = "No thought processes available.";
+        container.appendChild(p);
+        return;
+      }
+
+      frameworkEntries.forEach((entry, idx) => {
+        const item = document.createElement("div");
+        item.className = "thought-item";
+
+        const meta = document.createElement("div");
+        meta.className = "thought-meta";
+
+        const who = document.createElement("span");
+        who.textContent = `Annotator ${idx + 1}`;
+
+        const actionStr = document.createElement("span");
+        const choice = (entry.choice || "").trim().toUpperCase();
+        const actionText =
+          choice === "A"
+            ? scenario.action1
+            : choice === "B"
+            ? scenario.action2
+            : entry.chosen_action || "";
+        if (choice) {
+          actionStr.textContent = `Chose ${choice}: ${actionText}`;
+        } else if (actionText) {
+          actionStr.textContent = `Chose: ${actionText}`;
+        } else {
+          actionStr.textContent = "Choice not recorded";
+        }
+
+        meta.appendChild(who);
+        meta.appendChild(actionStr);
+
+        const text = document.createElement("div");
+        text.className = "thought-text";
+        text.textContent = entry.thought_process || "(No thought process text.)";
+
+        item.appendChild(meta);
+        item.appendChild(text);
+        container.appendChild(item);
+      });
+    }
+
+    function renderScenario() {
+      const { scenarios, currentIndex } = state;
+      if (!scenarios.length) return;
+
+      const scenario = scenarios[currentIndex];
+
+      // Header
+      el.scenarioId.textContent = `Scenario: ${scenario.scenario_id}`;
+      el.scenarioContext.textContent = scenario.context || "(No context provided.)";
+      el.actionA.textContent = scenario.action1 || "(No action A.)";
+      el.actionB.textContent = scenario.action2 || "(No action B.)";
+
+      // Index info
+      el.scenarioIndex.textContent = `Scenario ${currentIndex + 1} of ${
+        scenarios.length
+      }`;
+
+      // Prev/next buttons
+      el.prevBtn.disabled = currentIndex === 0;
+      el.nextBtn.disabled = currentIndex === scenarios.length - 1;
+
+      // Framework panels
+      ["utilitarian", "deontological", "virtue"].forEach((fw) => {
+        const fwEntries = scenario.frameworks[fw] || [];
+        renderDecisionSummary(el.framework[fw].decisions, fwEntries, scenario);
+        renderThoughts(el.framework[fw].thoughts, fwEntries, scenario);
+      });
+    }
+
+    function jumpToScenarioId(targetIdRaw) {
+      const targetId = (targetIdRaw || "").trim();
+      if (!targetId) return;
+
+      const { scenarios } = state;
+      const idx = scenarios.findIndex(
+        (s) => s.scenario_id.toLowerCase() === targetId.toLowerCase()
+      );
+      if (idx === -1) {
+        alert(`Scenario ID "${targetId}" not found.`);
+        return;
+      }
+      state.currentIndex = idx;
+      renderScenario();
+    }
+
+    // ---- EVENT BINDINGS ----
+    el.prevBtn.addEventListener("click", () => {
+      if (state.currentIndex > 0) {
+        state.currentIndex -= 1;
+        renderScenario();
+      }
+    });
+
+    el.nextBtn.addEventListener("click", () => {
+      if (state.currentIndex < state.scenarios.length - 1) {
+        state.currentIndex += 1;
+        renderScenario();
+      }
+    });
+
+    el.jumpBtn.addEventListener("click", () => {
+      jumpToScenarioId(el.scenarioInput.value);
+    });
+
+    el.scenarioInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        jumpToScenarioId(el.scenarioInput.value);
+      }
+    });
+
+    // ---- INIT ----
+    (async function init() {
+      try {
+        setStatus("Loading CSVs from HuggingFace…", "loading");
+        const datasets = await Promise.all(
+          CSV_SOURCES.map((src) => parseCsvSource(src))
+        );
+        const scenarios = buildScenarios(datasets);
+
+        if (!scenarios.length) {
+          setStatus("No scenarios found in the dataset.", "error");
+          return;
+        }
+        state.scenarios = scenarios;
+        state.currentIndex = 0;
+
+        setStatus(`Loaded ${scenarios.length} scenarios.`, "");
+        el.statusPill.className = "pill";
+        el.prevBtn.disabled = false;
+        el.nextBtn.disabled = false;
+
+        renderScenario();
+      } catch (err) {
+        console.error(err);
+        setStatus("Error loading dataset. Check console.", "error");
+      }
+    })();
+  </script>
+</body>
+</html>
