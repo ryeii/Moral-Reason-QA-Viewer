@@ -359,8 +359,9 @@
       font-style: italic;
     }
 
+    /* Taller thought processes panel */
     .thoughts-list {
-      max-height: 190px;
+      max-height: 260px; /* increased from 190px */
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -391,6 +392,13 @@
       white-space: pre-wrap;
     }
 
+    /* Highlighting style */
+    .hl-key {
+      background: #fef08a;
+      padding: 0 1px;
+      border-radius: 3px;
+    }
+
     .footer {
       margin-top: 18px;
       font-size: 0.7rem;
@@ -413,7 +421,7 @@
     <header>
       <h1>
         Moral-Reason-QA Viewer
-        <!-- Mode switch replaces old "Virtue · Deontological · Utilitarian" text -->
+        <!-- Mode switch -->
         <span class="mode-toggle">
           <span class="mode-label">View</span>
           <button class="mode-chip active" data-mode="disagreement">
@@ -471,7 +479,7 @@
             <div class="framework-tag">Maximize overall utility</div>
           </div>
           <div class="card">
-            <div class="card-title">Decision</div>
+            <div class="card-title">Decision Summary</div>
             <div class="decision-summary" id="utilitarian-decisions"></div>
           </div>
           <div class="card">
@@ -487,7 +495,7 @@
             <div class="framework-tag">Duty- and rule-based</div>
           </div>
           <div class="card">
-            <div class="card-title">Decision</div>
+            <div class="card-title">Decision Summary</div>
             <div class="decision-summary" id="deontological-decisions"></div>
           </div>
           <div class="card">
@@ -503,7 +511,7 @@
             <div class="framework-tag">Character and virtues</div>
           </div>
           <div class="card">
-            <div class="card-title">Decision</div>
+            <div class="card-title">Decision Summary</div>
             <div class="decision-summary" id="virtue-decisions"></div>
           </div>
           <div class="card">
@@ -555,6 +563,47 @@
           framework: "deontological",
           url: "https://huggingface.co/datasets/zankjhk/Moral-Reason-QA/raw/main/training_deontological_raw.csv",
         },
+      ],
+    };
+
+    // Keywords for highlighting per framework
+    const HIGHLIGHT_KEYWORDS = {
+      utilitarian: [
+        "utility",
+        "happiness",
+        "well-being",
+        "greatest good",
+        "consequences",
+        "outcome",
+        "benefit",
+        "harm",
+        "maximize",
+        "minimize",
+        "value",
+      ],
+      deontological: [
+        "duty",
+        "duties",
+        "obligation",
+        "rule",
+        "principle",
+        "categorical imperative",
+        "inherent",
+        "universalize",
+        "maxim",
+        "dignity",
+      ],
+      virtue: [
+        "virtue",
+        "character",
+        "flourishing",
+        "excellence",
+        "wisdom",
+        "courage",
+        "temperance",
+        "justice",
+        "eudaimonia",
+        "virtuous",
       ],
     };
 
@@ -737,7 +786,39 @@
         });
     }
 
-    function renderThoughts(container, frameworkEntries, scenario) {
+    // Escape HTML before inserting as innerHTML
+    function escapeHtml(str) {
+      return (str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Highlight framework-specific keywords (case-insensitive)
+    function highlightKeywords(text, framework) {
+      const keywords = HIGHLIGHT_KEYWORDS[framework] || [];
+      if (!keywords.length) return escapeHtml(text);
+
+      // Sort by length descending so multi-word phrases are replaced before substrings
+      const sorted = [...keywords].sort((a, b) => b.length - a.length);
+      const escapedPatterns = sorted.map((kw) =>
+        kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      );
+      const pattern = escapedPatterns.join("|");
+      if (!pattern) return escapeHtml(text);
+
+      const regex = new RegExp("(" + pattern + ")", "gi");
+      const escaped = escapeHtml(text);
+
+      return escaped.replace(
+        regex,
+        '<span class="hl-key">$1</span>'
+      );
+    }
+
+    function renderThoughts(container, frameworkEntries, scenario, frameworkKey) {
       container.innerHTML = "";
 
       if (!frameworkEntries || !frameworkEntries.length) {
@@ -779,7 +860,8 @@
 
         const text = document.createElement("div");
         text.className = "thought-text";
-        text.textContent = entry.thought_process || "(No thought process text.)";
+        const rawThought = entry.thought_process || "(No thought process text.)";
+        text.innerHTML = highlightKeywords(rawThought, frameworkKey);
 
         item.appendChild(meta);
         item.appendChild(text);
@@ -795,7 +877,8 @@
 
       // Header
       el.scenarioId.textContent = `Scenario: ${scenario.scenario_id}`;
-      el.scenarioContext.textContent = scenario.context || "(No context provided.)";
+      el.scenarioContext.textContent =
+        scenario.context || "(No context provided.)";
       el.actionA.textContent = scenario.action1 || "(No action A.)";
       el.actionB.textContent = scenario.action2 || "(No action B.)";
 
@@ -812,7 +895,7 @@
       ["utilitarian", "deontological", "virtue"].forEach((fw) => {
         const fwEntries = scenario.frameworks[fw] || [];
         renderDecisionSummary(el.framework[fw].decisions, fwEntries, scenario);
-        renderThoughts(el.framework[fw].thoughts, fwEntries, scenario);
+        renderThoughts(el.framework[fw].thoughts, fwEntries, scenario, fw);
       });
     }
 
